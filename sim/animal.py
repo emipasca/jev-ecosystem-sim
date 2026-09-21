@@ -40,6 +40,7 @@ class Animal:
         self.repro_cooldown = 0
         self.jev_detail = None      # latest decision detail (served by /api/entity)
         self.history = deque(maxlen=C.HISTORY_MAXLEN)  # (tick, action, confidence) over time
+        self.trail = deque(maxlen=C.TRAIL_MAXLEN)  # recent (x, y) per tick, for map trails
         self.last_sit_sig = None    # situation signature at the last real decision
         self.ticks_since_decide = 0  # ticks since the policy was last consulted
 

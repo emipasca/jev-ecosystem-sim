@@ -184,6 +184,8 @@ class Simulation:
         for animal in order:
             if animal.alive and animal.id in pers:
                 self._agent_turn(animal, pers[animal.id], decisions.get(animal.id))
+                if animal.alive:
+                    animal.trail.append((animal.x, animal.y))
         self.world.update_resources()
         self.animals = [a for a in self.animals if a.alive]
         self.tick_count += 1
@@ -299,7 +301,8 @@ class Simulation:
             "animals": [
                 {"id": a.id, "species": a.species.name, "x": a.x, "y": a.y,
                  "action": a.action, "energy": round(a.energy_frac, 2),
-                 "health": round(a.health_frac, 2), "adult": a.is_adult}
+                 "health": round(a.health_frac, 2), "adult": a.is_adult,
+                 "trail": list(a.trail)[-C.STATE_TRAIL_LEN:]}
                 for a in self.animals if a.alive
             ],
             "carcasses": [
@@ -330,6 +333,7 @@ class Simulation:
                     "available": d.get("available", []),
                     "tick": self.tick_count,
                     "history": list(a.history),
+                    "path": list(a.trail),
                 }
         return {"id": animal_id, "alive": False}
 

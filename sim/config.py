@@ -141,6 +141,8 @@ JEV_PRICE_PER_1M_INPUT = 0.0
 JEV_PRICE_PER_1M_OUTPUT = 0.0
 JEV_MAX_CONCURRENCY = 16     # parallel Jev decide() calls per tick
 HISTORY_MAXLEN = 400         # per-animal decision history kept for the inspector
+TRAIL_MAXLEN = 250           # per-animal recent positions kept for movement trails
+STATE_TRAIL_LEN = 12         # trail points included per animal in /api/state
 
 # ---------------------------------------------------------------- decision economy
 DECIDE_ON_CHANGE = True      # only call the policy when an animal's situation changes

@@ -190,7 +190,10 @@ async function loadWorld(refit) {
 
 async function init() {
   resize();
-  await loadWorld(true);
+  const saved = loadUI();
+  // only fit the camera on a truly first load; a saved camera wins
+  await loadWorld(!(saved && saved.cam));
+  if (saved) await restoreUI(saved);
   poll();
   setInterval(poll, 100);
 }
@@ -232,6 +235,34 @@ function render(s) {
   ctx.setTransform(cam.scale, 0, 0, cam.scale, -cam.x * cam.scale, -cam.y * cam.scale);
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(offscreen, 0, 0);
+
+  // movement trails: faint per-species polylines, behind everything that moves
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
+  ctx.globalAlpha = 0.25;
+  ctx.lineWidth = Math.max(0.15, 1 / cam.scale);
+  for (const a of s.animals) {
+    const tr = a.trail;
+    if (!tr || tr.length < 2) continue;
+    ctx.strokeStyle = world.species_colors[a.species] || "#fff";
+    ctx.beginPath();
+    ctx.moveTo(tr[0][0] + 0.5, tr[0][1] + 0.5);
+    for (let i = 1; i < tr.length; i++) ctx.lineTo(tr[i][0] + 0.5, tr[i][1] + 0.5);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  // the selected animal's FULL path (from the entity poll), bright and thick
+  if (selectedId !== null && selectedPath && selectedPath.length > 1) {
+    ctx.globalAlpha = 0.9;
+    ctx.strokeStyle = SELECT_COLOR;
+    ctx.lineWidth = Math.max(0.3, 2 / cam.scale);
+    ctx.beginPath();
+    ctx.moveTo(selectedPath[0][0] + 0.5, selectedPath[0][1] + 0.5);
+    for (let i = 1; i < selectedPath.length; i++)
+      ctx.lineTo(selectedPath[i][0] + 0.5, selectedPath[i][1] + 0.5);
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
 
   // carcasses: dark red crosses (world units: 1 = one cell)
   ctx.fillStyle = CARCASS_COLOR;
@@ -349,6 +380,7 @@ window.addEventListener("mouseup", e => {
   mouseDown = null; panned = false;
   canvas.classList.remove("panning");
   if (!wasPan && e.target === canvas) selectAt(e.clientX, e.clientY);
+  if (wasPan) saveUICam();
 });
 canvas.addEventListener("wheel", e => {
   e.preventDefault();
@@ -360,6 +392,7 @@ canvas.addEventListener("wheel", e => {
   cam.x = wx - e.clientX / ns;
   cam.y = wy - e.clientY / ns;
   rerender();
+  saveUICam();
 }, { passive: false });
 
 function selectAt(sx, sy) {
@@ -387,9 +420,11 @@ const waction = document.getElementById("waction");
 const wbars = document.getElementById("wbars");
 const wdead = document.getElementById("wdead");
 let selectedId = null, entityTimer = null, entityBusy = false;
+let selectedPath = null;  // full trail of the inspected animal, from the entity poll
 
 function openWidget(animal, sx, sy) {
   selectedId = animal.id;
+  selectedPath = null;
   wtitle.textContent = `${animal.species} #${animal.id}`;
   wdead.style.display = "none";
   // seed instantly from what we already know so the widget is never blank on click
@@ -408,12 +443,15 @@ function openWidget(animal, sx, sy) {
   if (entityTimer) clearInterval(entityTimer);
   pollEntity();
   entityTimer = setInterval(pollEntity, 120);
+  saveUI();
 }
 
 function closeWidget() {
   selectedId = null;
+  selectedPath = null;
   widget.style.display = "none";
   if (entityTimer) { clearInterval(entityTimer); entityTimer = null; }
+  saveUI();
 }
 document.getElementById("wclose").onclick = closeWidget;
 
@@ -422,7 +460,10 @@ async function pollEntity() {
   entityBusy = true;
   try {
     const ent = await (await fetch(`api/entity?id=${selectedId}`)).json();
-    if (ent.id === selectedId) updateWidget(ent);
+    if (ent.id === selectedId) {
+      if (ent.alive && ent.path) selectedPath = ent.path;
+      updateWidget(ent);
+    }
   } catch (e) { /* transient; keep polling */ }
   entityBusy = false;
 }
@@ -486,32 +527,133 @@ window.addEventListener("mousemove", e => {
   widget.style.left = Math.max(0, wdrag.left + e.clientX - wdrag.sx) + "px";
   widget.style.top = Math.max(0, wdrag.top + e.clientY - wdrag.sy) + "px";
 });
-window.addEventListener("mouseup", () => { wdrag = null; });
+window.addEventListener("mouseup", () => {
+  if (wdrag) { wdrag = null; saveUI(); }  // widget drag end
+});
+
+// ---------------------------------------------------------- UI persistence
+// One JSON blob in localStorage; restored on load, so a refresh keeps the
+// whole UI. Only "new run" resets SIM state -- and even that keeps the prefs.
+const UI_KEY = "vesta-ecosim-ui";
+let uiAuto = false, uiPlaying = false;
+
+function saveUI() {
+  try {
+    localStorage.setItem(UI_KEY, JSON.stringify({
+      seed: document.getElementById("seed").value,
+      sample: document.getElementById("sample").checked,
+      auto: uiAuto,
+      ticks: document.getElementById("speed").value,
+      playing: uiPlaying,
+      cam: { x: cam.x, y: cam.y, scale: cam.scale },
+      selectedId,
+      widgetOpen: selectedId !== null && widget.style.display === "block",
+      // style.left survives display:none (offsetLeft would read 0)
+      widgetPos: { left: parseFloat(widget.style.left) || 0,
+                   top: parseFloat(widget.style.top) || 0 },
+    }));
+  } catch (e) { /* storage unavailable; UI still works, just not persisted */ }
+}
+let camSaveTimer = null;
+function saveUICam() {           // debounced: wheel/pan fire in bursts
+  clearTimeout(camSaveTimer);
+  camSaveTimer = setTimeout(saveUI, 250);
+}
+function loadUI() {
+  try { return JSON.parse(localStorage.getItem(UI_KEY) || "null"); }
+  catch (e) { return null; }
+}
+
+async function restoreUI(saved) {
+  if (saved.seed != null) document.getElementById("seed").value = saved.seed;
+  if (saved.ticks != null) document.getElementById("speed").value = saved.ticks;
+  if (saved.sample != null) {
+    document.getElementById("sample").checked = !!saved.sample;
+    await control("sample", saved.sample ? 1 : 0);  // keep the server in step
+  }
+  if (saved.cam && saved.cam.scale > 0) Object.assign(cam, saved.cam);
+
+  uiAuto = !!saved.auto;
+  uiPlaying = !!saved.playing;
+  if (uiPlaying && uiAuto) {       // it was explicitly running in auto: resume
+    document.getElementById("speedval").textContent = "auto";
+    await control("auto", 1);
+  } else {
+    uiAuto = false;                // never surprise-start an auto loop on load
+    document.getElementById("speedval").textContent =
+      document.getElementById("speed").value + " t/s";
+    await control("speed", document.getElementById("speed").value);
+    if (uiPlaying) await control("play");
+  }
+
+  if (saved.widgetPos && (saved.widgetPos.left || saved.widgetPos.top)) {
+    widget.style.left = Math.min(Math.max(0, saved.widgetPos.left), window.innerWidth - 120) + "px";
+    widget.style.top = Math.min(Math.max(0, saved.widgetPos.top), window.innerHeight - 80) + "px";
+    widget.dataset.placed = "1";
+  }
+  if (saved.widgetOpen && saved.selectedId != null) {
+    try {  // reopen only if that animal still exists; otherwise just clear it
+      const ent = await (await fetch(`api/entity?id=${saved.selectedId}`)).json();
+      if (ent.alive) {
+        selectedId = ent.id;
+        selectedPath = ent.path || null;
+        wtitle.textContent = `${ent.species} #${ent.id}`;
+        wdead.style.display = "none";
+        widget.style.display = "block";
+        updateWidget(ent);
+        if (entityTimer) clearInterval(entityTimer);
+        entityTimer = setInterval(pollEntity, 120);
+      }
+    } catch (e) { /* server hiccup; skip the widget restore */ }
+  }
+  saveUI();
+}
 
 // ---------------------------------------------------------- controls
 async function control(cmd, value) {
   const q = value !== undefined ? `&value=${value}` : "";
   await fetch(`api/control?cmd=${cmd}${q}`);
 }
-document.getElementById("play").onclick = () => control("play");
-document.getElementById("pause").onclick = () => control("pause");
-document.getElementById("step").onclick = () => control("step");
+document.getElementById("play").onclick = () => {
+  uiPlaying = true;
+  control("play");
+  saveUI();
+};
+document.getElementById("pause").onclick = () => {
+  uiPlaying = false;
+  control("pause");
+  saveUI();
+};
+document.getElementById("step").onclick = () => {
+  uiPlaying = false;
+  control("step");
+  saveUI();
+};
 document.getElementById("auto").onclick = () => {
+  uiAuto = true; uiPlaying = true;
   document.getElementById("speedval").textContent = "auto";
   control("auto", 1);
+  saveUI();
 };
 document.getElementById("speed").oninput = (e) => {
+  uiAuto = false;  // picking a numeric speed leaves auto mode (matches the server)
   document.getElementById("speedval").textContent = e.target.value + " t/s";
   control("speed", e.target.value);
+  saveUI();
 };
+document.getElementById("seed").onchange = saveUI;
 document.getElementById("newrun").onclick = async () => {
   const s = document.getElementById("seed").value || "7";
-  await control("reset", s);
-  await loadWorld(true);   // new island -> refetch + refit
-  closeWidget();
+  await control("reset", s);        // the ONLY thing that resets sim state
+  uiPlaying = false;                // reset leaves the server paused
+  await loadWorld(false);           // new island, but the saved camera stays
+  closeWidget();                    // old ids are gone; clears + saves
   poll();
 };
-document.getElementById("sample").onchange = (e) => control("sample", e.target.checked ? 1 : 0);
+document.getElementById("sample").onchange = (e) => {
+  control("sample", e.target.checked ? 1 : 0);
+  saveUI();
+};
 
 init();
 </script>
