@@ -81,6 +81,16 @@
   .brow.chosen .bf { background: #7fd1a6; }
   .brow.chosen .bv { color: #7fd1a6; }
   #wdead { color: #c96a5e; font-weight: 600; display: none; padding: 2px 0 6px; }
+  #whistlabel { margin-top: 10px; color: #6f8296; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+  #whist {
+    margin-top: 4px; max-height: 130px; overflow: auto;
+    font: 11px/1.5 ui-monospace, monospace;
+  }
+  #whist .h { display: flex; gap: 8px; align-items: baseline; }
+  #whist .h .t { color: #6f8296; width: 48px; flex: none; text-align: right; }
+  #whist .h .a { color: #cfd8e3; flex: 1; }
+  #whist .h .c { color: #6f8296; width: 34px; text-align: right; flex: none; font-variant-numeric: tabular-nums; }
+  #whist .h.chg .a { color: #7fd1a6; }
 </style>
 </head>
 <body>
@@ -112,6 +122,8 @@
     <pre id="wstate"></pre>
     <div id="waction"></div>
     <div id="wbars"></div>
+    <div id="whistlabel">decision history</div>
+    <div id="whist"></div>
   </div>
 </div>
 
@@ -335,8 +347,9 @@ function openWidget(animal, sx, sy) {
   selectedId = animal.id;
   wtitle.textContent = `${animal.species} #${animal.id}`;
   wdead.style.display = "none";
-  wstate.textContent = "";
-  waction.innerHTML = "";
+  // seed instantly from what we already know so the widget is never blank on click
+  wstate.textContent = "loading…";
+  waction.innerHTML = `action: <b>${animal.action}</b>`;
   wbars.innerHTML = "";
   widget.style.display = "block";
   // place near the click, clamped on-screen (keep position if already open)
@@ -395,6 +408,24 @@ function updateWidget(ent) {
       `<span class="bt"><span class="bf" style="width:${pct.toFixed(1)}%"></span></span>` +
       `<span class="bv">${pct.toFixed(0)}%</span></div>`;
   }).join("");
+
+  const hist = ent.history || [];
+  const label = document.getElementById("whistlabel");
+  const box = document.getElementById("whist");
+  if (!hist.length) {
+    label.style.display = "none"; box.innerHTML = "";
+  } else {
+    label.style.display = "block";
+    // newest first, mark ticks where the action changed from the previous one
+    const rows = hist.slice(-60).reverse();
+    box.innerHTML = rows.map((r, i) => {
+      const prev = rows[i + 1];
+      const chg = prev && prev.action !== r.action ? " chg" : "";
+      const c = r.confidence != null ? (r.confidence * 100).toFixed(0) + "%" : "";
+      return `<div class="h${chg}"><span class="t">t${r.tick}</span>` +
+        `<span class="a">${r.action}</span><span class="c">${c}</span></div>`;
+    }).join("");
+  }
 }
 
 // drag the widget by its header

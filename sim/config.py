@@ -140,3 +140,4 @@ JEV_TIMEOUT = 15.0          # seconds per request before falling back to the heu
 JEV_PRICE_PER_1M_INPUT = 0.0
 JEV_PRICE_PER_1M_OUTPUT = 0.0
 JEV_MAX_CONCURRENCY = 16     # parallel Jev decide() calls per tick
+HISTORY_MAXLEN = 400         # per-animal decision history kept for the inspector

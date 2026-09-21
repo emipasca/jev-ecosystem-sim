@@ -130,6 +130,11 @@ class Simulation:
         animal.sprinted = False
         if detail is not None:
             animal.jev_detail = detail
+            animal.history.append({
+                "tick": self.tick_count,
+                "action": detail["action"],
+                "confidence": detail.get("confidence"),
+            })
         action = detail["action"] if detail else None
         if action is None or action not in per.available:
             action = "wander"
@@ -247,6 +252,8 @@ class Simulation:
                     "confidence": d.get("confidence"),
                     "probabilities": d.get("probabilities"),
                     "available": d.get("available", []),
+                    "tick": self.tick_count,
+                    "history": list(a.history),
                 }
         return {"id": animal_id, "alive": False}
 

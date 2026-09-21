@@ -6,6 +6,7 @@ size, energy, stamina, health and exertion -- never stored.
 """
 
 import math
+from collections import deque
 
 from . import config as C
 from .species import Species
@@ -38,6 +39,7 @@ class Animal:
         self.sprinted = False       # sprinted this tick (blocks stamina regen)
         self.repro_cooldown = 0
         self.jev_detail = None      # latest decision detail (served by /api/entity)
+        self.history = deque(maxlen=C.HISTORY_MAXLEN)  # (tick, action, confidence) over time
 
     # ------------------------------------------------------------- fractions
     @property
