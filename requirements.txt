@@ -1,0 +1,2 @@
+# Intentionally empty: the simulation and web UI use only the Python 3 stdlib.
+# (Python >= 3.10 recommended; developed on 3.13.)
