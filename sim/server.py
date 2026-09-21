@@ -7,6 +7,7 @@ Endpoints:
   GET /                 -> the UI (web/index.html)
   GET /api/world        -> static world description (terrain, size, colours)
   GET /api/state        -> latest tick state (animals, veg, carcasses, pops)
+  GET /api/entity?id=N  -> one animal's live decision detail (or alive:false)
   GET /api/control?cmd= -> play | pause | step | speed&value=<ticks/s>
 """
 
@@ -59,6 +60,10 @@ class SimRunner:
     def world(self) -> dict:
         return self._world_cache
 
+    def entity(self, animal_id: int) -> dict:
+        with self.lock:
+            return self.sim.entity_state(animal_id)
+
     def control(self, cmd: str, value=None) -> dict:
         if cmd == "play":
             self.playing = True
@@ -97,6 +102,13 @@ def make_handler(runner: SimRunner):
                     self._send_json(runner.world())
                 elif url.path == "/api/state":
                     self._send_json(runner.state())
+                elif url.path == "/api/entity":
+                    q = parse_qs(url.query)
+                    try:
+                        aid = int(q.get("id", [""])[0])
+                    except (TypeError, ValueError):
+                        aid = -1
+                    self._send_json(runner.entity(aid))
                 elif url.path == "/api/control":
                     q = parse_qs(url.query)
                     cmd = q.get("cmd", [""])[0]

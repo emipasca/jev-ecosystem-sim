@@ -108,11 +108,13 @@ class Simulation:
             workers = min(C.JEV_MAX_CONCURRENCY, len(live))
             with ThreadPoolExecutor(max_workers=workers) as ex:
                 decided = ex.map(
-                    lambda a: (a.id, self.policy.decide(pers[a.id].text, pers[a.id].available)),
+                    lambda a: (a.id, self.policy.decide_verbose(pers[a.id].text,
+                                                                pers[a.id].available)),
                     live)
                 decisions = dict(decided)
         else:
-            decisions = {a.id: self.policy.decide(pers[a.id].text, pers[a.id].available)
+            decisions = {a.id: self.policy.decide_verbose(pers[a.id].text,
+                                                          pers[a.id].available)
                          for a in live}
 
         # Phase 3: resolve sequentially in the shuffled order (order matters for
@@ -124,8 +126,11 @@ class Simulation:
         self.animals = [a for a in self.animals if a.alive]
         self.tick_count += 1
 
-    def _agent_turn(self, animal, per, action):
+    def _agent_turn(self, animal, per, detail):
         animal.sprinted = False
+        if detail is not None:
+            animal.jev_detail = detail
+        action = detail["action"] if detail else None
         if action is None or action not in per.available:
             action = "wander"
         if action != animal.action:
@@ -227,6 +232,23 @@ class Simulation:
             "jev": (self.policy.metrics.snapshot()
                     if hasattr(self.policy, "metrics") else None),
         }
+
+    def entity_state(self, animal_id: int) -> dict:
+        """Live per-animal view for /api/entity: the latest decision detail."""
+        for a in self.animals:
+            if a.id == animal_id and a.alive:
+                d = a.jev_detail or {}
+                return {
+                    "id": a.id, "species": a.species.name, "alive": True,
+                    "x": a.x, "y": a.y,
+                    "state_text": d.get("state_text", ""),
+                    "action": a.action,
+                    "choice": d.get("choice"),
+                    "confidence": d.get("confidence"),
+                    "probabilities": d.get("probabilities"),
+                    "available": d.get("available", []),
+                }
+        return {"id": animal_id, "alive": False}
 
     def world_static(self) -> dict:
         """Static world description, sent to the UI once."""

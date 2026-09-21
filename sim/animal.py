@@ -37,6 +37,7 @@ class Animal:
         self.move_budget = 0.0      # fractional cells carried between ticks
         self.sprinted = False       # sprinted this tick (blocks stamina regen)
         self.repro_cooldown = 0
+        self.jev_detail = None      # latest decision detail (served by /api/entity)
 
     # ------------------------------------------------------------- fractions
     @property

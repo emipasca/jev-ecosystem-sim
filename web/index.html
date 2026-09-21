@@ -5,58 +5,115 @@
 <title>Ecosystem Island</title>
 <style>
   :root { color-scheme: dark; }
-  body {
-    margin: 0; background: #10141a; color: #cfd8e3;
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: #10141a; color: #cfd8e3;
     font: 14px/1.5 system-ui, sans-serif;
-    display: flex; flex-direction: column; align-items: center; gap: 10px;
-    padding: 16px;
   }
-  h1 { font-size: 17px; font-weight: 600; margin: 0; letter-spacing: .3px; color: #e8eef6; }
-  #bar {
-    display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center;
+  #map { position: fixed; inset: 0; display: block; cursor: grab; }
+  #map.panning { cursor: grabbing; }
+
+  .overlay {
+    position: fixed; z-index: 10;
+    background: rgba(13, 17, 23, .78);
+    border: 1px solid #2a3648; border-radius: 8px;
+    padding: 8px 12px; backdrop-filter: blur(4px);
   }
+  h1 { font-size: 15px; font-weight: 600; margin: 0 0 6px; letter-spacing: .3px; color: #e8eef6; }
+  #hud { top: 12px; left: 12px; max-width: min(560px, calc(100vw - 24px)); }
+  #bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
   button {
     background: #223047; color: #dbe6f3; border: 1px solid #33465f;
     border-radius: 6px; padding: 5px 14px; font: inherit; cursor: pointer;
   }
   button:hover { background: #2b3d59; }
   #tick { font-variant-numeric: tabular-nums; color: #9fb3c8; min-width: 90px; }
-  #pops { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  #pops { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
   .pop { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
   .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  canvas { border: 1px solid #2a3648; border-radius: 4px; image-rendering: pixelated; }
-  #events {
-    width: 700px; max-width: 95vw; height: 118px; overflow: hidden;
-    font: 12px/1.45 ui-monospace, monospace; color: #8fa1b5;
-    border-top: 1px solid #2a3648; padding-top: 6px;
-  }
   #speedval { color: #9fb3c8; min-width: 56px; font-variant-numeric: tabular-nums; }
   label { color: #9fb3c8; }
+
+  #events {
+    bottom: 12px; left: 12px; width: 420px; max-width: calc(100vw - 24px);
+    height: 118px; overflow: hidden;
+    font: 12px/1.45 ui-monospace, monospace; color: #8fa1b5;
+  }
+
   #jev {
+    top: 12px; right: 12px;
     display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
-    width: 700px; max-width: 95vw; font: 12px/1.4 ui-monospace, monospace;
-    color: #9fb3c8; border-top: 1px solid #2a3648; padding-top: 8px;
+    max-width: min(620px, calc(100vw - 24px));
+    font: 12px/1.4 ui-monospace, monospace; color: #9fb3c8;
   }
   #jev .m { display: flex; flex-direction: column; align-items: center; }
   #jev .m b { color: #dbe6f3; font-size: 14px; font-variant-numeric: tabular-nums; }
   #jev .m span { color: #6f8296; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
   #jev .hdr { color: #7fd1a6; font-weight: 600; align-self: center; }
+
+  /* floating entity widget */
+  #widget { display: none; width: 300px; padding: 0; z-index: 20; user-select: none; }
+  #whead {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 10px; cursor: move; border-bottom: 1px solid #2a3648;
+    color: #e8eef6; font-weight: 600;
+  }
+  #whead .sel-ring { color: #ffd76a; }
+  #wclose {
+    background: none; border: none; color: #8fa1b5; font-size: 16px;
+    padding: 0 4px; line-height: 1; cursor: pointer;
+  }
+  #wclose:hover { color: #e8eef6; background: none; }
+  #wbody { padding: 8px 10px 10px; }
+  #wstate {
+    margin: 0 0 8px; white-space: pre-wrap;
+    font: 11px/1.5 ui-monospace, monospace; color: #9fb3c8;
+    max-height: 190px; overflow: auto;
+  }
+  #waction { font: 12px/1.5 ui-monospace, monospace; color: #cfd8e3; margin-bottom: 8px; }
+  #waction b { color: #7fd1a6; }
+  .brow { display: flex; align-items: center; gap: 6px; margin: 2px 0; font: 11px/1.4 ui-monospace, monospace; }
+  .brow .bl { width: 58px; text-align: right; color: #8fa1b5; flex: none; }
+  .brow .bt { flex: 1; height: 9px; background: #1a2432; border-radius: 4px; overflow: hidden; }
+  .brow .bf { display: block; height: 100%; background: #3d5a80; }
+  .brow .bv { width: 34px; color: #6f8296; flex: none; font-variant-numeric: tabular-nums; }
+  .brow.chosen .bl { color: #e8eef6; }
+  .brow.chosen .bf { background: #7fd1a6; }
+  .brow.chosen .bv { color: #7fd1a6; }
+  #wdead { color: #c96a5e; font-weight: 600; display: none; padding: 2px 0 6px; }
 </style>
 </head>
 <body>
-<h1>Ecosystem Island &mdash; gazelle &middot; lion &middot; jackal</h1>
-<div id="bar">
-  <button id="play">&#9654; play</button>
-  <button id="pause">&#10073;&#10073; pause</button>
-  <button id="step">step</button>
-  <label>speed <input type="range" id="speed" min="1" max="40" value="10"></label>
-  <span id="speedval">10 t/s</span>
-  <span id="tick">tick 0</span>
+<canvas id="map"></canvas>
+
+<div id="hud" class="overlay">
+  <h1>Ecosystem Island &mdash; gazelle &middot; lion &middot; jackal</h1>
+  <div id="bar">
+    <button id="play">&#9654; play</button>
+    <button id="pause">&#10073;&#10073; pause</button>
+    <button id="step">step</button>
+    <label>speed <input type="range" id="speed" min="1" max="40" value="10"></label>
+    <span id="speedval">10 t/s</span>
+    <span id="tick">tick 0</span>
+  </div>
+  <div id="pops"></div>
 </div>
-<div id="pops"></div>
-<canvas id="map" width="700" height="700"></canvas>
-<div id="events"></div>
-<div id="jev"></div>
+
+<div id="jev" class="overlay"></div>
+<div id="events" class="overlay"></div>
+
+<div id="widget" class="overlay">
+  <div id="whead">
+    <span><span class="sel-ring">&#9678;</span> <span id="wtitle"></span></span>
+    <button id="wclose" title="close">&times;</button>
+  </div>
+  <div id="wbody">
+    <div id="wdead">deceased</div>
+    <pre id="wstate"></pre>
+    <div id="waction"></div>
+    <div id="wbars"></div>
+  </div>
+</div>
 
 <script>
 "use strict";
@@ -71,19 +128,40 @@ const TERRAIN_COLORS = [
   [[139, 135, 131],[139, 135, 131]], // rocky highland
   [[104, 117, 94], [ 76, 105, 82]],  // marsh
 ];
+const SEA_COLOR = "rgb(24, 52, 84)";   // matches TERRAIN_COLORS[0]: infinite water
 const CARCASS_COLOR = "#8c2f26";
+const SELECT_COLOR = "#ffd76a";
 
-let world = null, base = null, offscreen = null, off = null;
+let world = null, base = null, offscreen = null, off = null, lastState = null;
 const canvas = document.getElementById("map");
 const ctx = canvas.getContext("2d");
-ctx.imageSmoothingEnabled = false;
+
+// camera: world coords of the top-left screen corner, plus pixels-per-cell
+const cam = { x: 0, y: 0, scale: 3 };
+const toWorldX = sx => cam.x + sx / cam.scale;
+const toWorldY = sy => cam.y + sy / cam.scale;
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  rerender();
+}
+window.addEventListener("resize", resize);
+
+function fitCamera() {
+  cam.scale = Math.min(canvas.width / world.w, canvas.height / world.h) * 0.9;
+  cam.x = world.w / 2 - canvas.width / (2 * cam.scale);
+  cam.y = world.h / 2 - canvas.height / (2 * cam.scale);
+}
 
 async function init() {
+  resize();
   world = await (await fetch("api/world")).json();
   offscreen = document.createElement("canvas");
   offscreen.width = world.w; offscreen.height = world.h;
   off = offscreen.getContext("2d");
   base = off.createImageData(world.w, world.h);
+  fitCamera();
   poll();
   setInterval(poll, 100);
 }
@@ -99,7 +177,10 @@ async function poll() {
   polling = false;
 }
 
+function rerender() { if (lastState) render(lastState); }
+
 function render(s) {
+  lastState = s;
   const { w, h, terrain, veg_max } = world;
   const px = base.data;
   const veg = s.veg;
@@ -114,27 +195,45 @@ function render(s) {
     px[j + 3] = 255;
   }
   off.putImageData(base, 0, 0);
-  ctx.drawImage(offscreen, 0, 0, canvas.width, canvas.height);
 
-  const sc = canvas.width / w;
-  // carcasses: dark red crosses
+  // infinite sea, then the island through the camera transform
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = SEA_COLOR;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.setTransform(cam.scale, 0, 0, cam.scale, -cam.x * cam.scale, -cam.y * cam.scale);
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(offscreen, 0, 0);
+
+  // carcasses: dark red crosses (world units: 1 = one cell)
   ctx.fillStyle = CARCASS_COLOR;
   for (const c of s.carcasses) {
-    ctx.fillRect(c.x * sc - 1, c.y * sc + sc / 2 - 1, sc + 2, 2);
-    ctx.fillRect(c.x * sc + sc / 2 - 1, c.y * sc - 1, 2, sc + 2);
+    ctx.fillRect(c.x - 0.15, c.y + 0.35, 1.3, 0.3);
+    ctx.fillRect(c.x + 0.35, c.y - 0.15, 0.3, 1.3);
   }
   // animals: dots by species (lions drawn bigger)
+  let selected = null;
   for (const a of s.animals) {
+    if (a.id === selectedId) selected = a;
     const color = world.species_colors[a.species] || "#fff";
-    const r = a.species === "lion" ? sc * 1.1 : a.adult ? sc * 0.75 : sc * 0.5;
+    const r = a.species === "lion" ? 1.1 : a.adult ? 0.75 : 0.5;
     ctx.beginPath();
-    ctx.arc(a.x * sc + sc / 2, a.y * sc + sc / 2, r, 0, Math.PI * 2);
+    ctx.arc(a.x + 0.5, a.y + 0.5, r, 0, Math.PI * 2);
     ctx.fillStyle = color;
     ctx.fill();
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 1 / cam.scale;
     ctx.strokeStyle = "rgba(0,0,0,.55)";
     ctx.stroke();
   }
+  // selection ring on top
+  if (selected) {
+    const r = selected.species === "lion" ? 1.1 : selected.adult ? 0.75 : 0.5;
+    ctx.beginPath();
+    ctx.arc(selected.x + 0.5, selected.y + 0.5, r + 0.9, 0, Math.PI * 2);
+    ctx.lineWidth = 2 / cam.scale;
+    ctx.strokeStyle = SELECT_COLOR;
+    ctx.stroke();
+  }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
 
   document.getElementById("tick").textContent = "tick " + s.tick;
   const pops = document.getElementById("pops");
@@ -166,6 +265,154 @@ function render(s) {
   }
 }
 
+// ---------------------------------------------------------- pan / zoom / select
+const DRAG_THRESHOLD = 4;  // px of movement before a press counts as a pan
+let mouseDown = null, panned = false;
+
+canvas.addEventListener("mousedown", e => {
+  mouseDown = { sx: e.clientX, sy: e.clientY, camX: cam.x, camY: cam.y };
+  panned = false;
+});
+window.addEventListener("mousemove", e => {
+  if (!mouseDown) return;
+  const dx = e.clientX - mouseDown.sx, dy = e.clientY - mouseDown.sy;
+  if (!panned && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
+    panned = true;
+    canvas.classList.add("panning");
+  }
+  if (panned) {
+    cam.x = mouseDown.camX - dx / cam.scale;
+    cam.y = mouseDown.camY - dy / cam.scale;
+    rerender();
+  }
+});
+window.addEventListener("mouseup", e => {
+  if (!mouseDown) return;
+  const wasPan = panned;
+  mouseDown = null; panned = false;
+  canvas.classList.remove("panning");
+  if (!wasPan && e.target === canvas) selectAt(e.clientX, e.clientY);
+});
+canvas.addEventListener("wheel", e => {
+  e.preventDefault();
+  const factor = Math.exp(-e.deltaY * 0.0015);
+  const ns = Math.min(80, Math.max(0.4, cam.scale * factor));
+  // zoom toward the cursor: keep the world point under it fixed
+  const wx = toWorldX(e.clientX), wy = toWorldY(e.clientY);
+  cam.scale = ns;
+  cam.x = wx - e.clientX / ns;
+  cam.y = wy - e.clientY / ns;
+  rerender();
+}, { passive: false });
+
+function selectAt(sx, sy) {
+  if (!lastState) return;
+  const wx = toWorldX(sx), wy = toWorldY(sy);
+  let best = null, bestD = Infinity;
+  for (const a of lastState.animals) {
+    const d = Math.hypot(a.x + 0.5 - wx, a.y + 0.5 - wy);
+    if (d < bestD) { best = a; bestD = d; }
+  }
+  const pickRadius = Math.max(1.6, 10 / cam.scale);  // ~10 px, generous when zoomed out
+  if (best && bestD <= pickRadius) {
+    openWidget(best, sx, sy);
+  } else {
+    closeWidget();
+  }
+  rerender();
+}
+
+// ---------------------------------------------------------- entity widget
+const widget = document.getElementById("widget");
+const wtitle = document.getElementById("wtitle");
+const wstate = document.getElementById("wstate");
+const waction = document.getElementById("waction");
+const wbars = document.getElementById("wbars");
+const wdead = document.getElementById("wdead");
+let selectedId = null, entityTimer = null, entityBusy = false;
+
+function openWidget(animal, sx, sy) {
+  selectedId = animal.id;
+  wtitle.textContent = `${animal.species} #${animal.id}`;
+  wdead.style.display = "none";
+  wstate.textContent = "";
+  waction.innerHTML = "";
+  wbars.innerHTML = "";
+  widget.style.display = "block";
+  // place near the click, clamped on-screen (keep position if already open)
+  if (!widget.dataset.placed) {
+    const x = Math.min(Math.max(8, sx + 18), window.innerWidth - 320);
+    const y = Math.min(Math.max(8, sy - 10), window.innerHeight - 260);
+    widget.style.left = x + "px";
+    widget.style.top = y + "px";
+    widget.dataset.placed = "1";
+  }
+  if (entityTimer) clearInterval(entityTimer);
+  pollEntity();
+  entityTimer = setInterval(pollEntity, 120);
+}
+
+function closeWidget() {
+  selectedId = null;
+  widget.style.display = "none";
+  if (entityTimer) { clearInterval(entityTimer); entityTimer = null; }
+}
+document.getElementById("wclose").onclick = closeWidget;
+
+async function pollEntity() {
+  if (selectedId === null || entityBusy || document.hidden) return;
+  entityBusy = true;
+  try {
+    const ent = await (await fetch(`api/entity?id=${selectedId}`)).json();
+    if (ent.id === selectedId) updateWidget(ent);
+  } catch (e) { /* transient; keep polling */ }
+  entityBusy = false;
+}
+
+function updateWidget(ent) {
+  if (!ent.alive) {
+    wdead.style.display = "block";
+    waction.innerHTML = "";
+    wbars.innerHTML = "";
+    if (entityTimer) { clearInterval(entityTimer); entityTimer = null; }
+    return;
+  }
+  wtitle.textContent = `${ent.species} #${ent.id}`;
+  wstate.textContent = ent.state_text || "(no perception yet — step the sim)";
+  const conf = ent.confidence != null ? ` &middot; confidence ${(ent.confidence * 100).toFixed(0)}%` : "";
+  waction.innerHTML = `action: <b>${ent.action}</b>${conf}`;
+
+  let probs = ent.probabilities;
+  if (!probs || typeof probs !== "object") {
+    probs = {};
+    if (ent.choice) probs[ent.choice] = ent.confidence != null ? ent.confidence : 1;
+  }
+  const rows = Object.entries(probs).sort((a, b) => b[1] - a[1]);
+  wbars.innerHTML = rows.map(([name, p]) => {
+    const pct = Math.max(0, Math.min(100, p * 100));
+    const chosen = name === ent.choice ? " chosen" : "";
+    return `<div class="brow${chosen}"><span class="bl">${name}</span>` +
+      `<span class="bt"><span class="bf" style="width:${pct.toFixed(1)}%"></span></span>` +
+      `<span class="bv">${pct.toFixed(0)}%</span></div>`;
+  }).join("");
+}
+
+// drag the widget by its header
+let wdrag = null;
+document.getElementById("whead").addEventListener("mousedown", e => {
+  if (e.target.id === "wclose") return;
+  wdrag = { sx: e.clientX, sy: e.clientY,
+            left: widget.offsetLeft, top: widget.offsetTop };
+  e.preventDefault();
+});
+window.addEventListener("mousemove", e => {
+  if (!wdrag) return;
+  widget.style.left = Math.max(0, wdrag.left + e.clientX - wdrag.sx) + "px";
+  widget.style.top = Math.max(0, wdrag.top + e.clientY - wdrag.sy) + "px";
+});
+window.addEventListener("mouseup", () => { wdrag = null; });
+
+// ---------------------------------------------------------- controls
 async function control(cmd, value) {
   const q = value !== undefined ? `&value=${value}` : "";
   await fetch(`api/control?cmd=${cmd}${q}`);

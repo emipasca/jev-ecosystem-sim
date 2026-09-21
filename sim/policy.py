@@ -22,6 +22,12 @@ class Policy:
 
     def decide(self, perceived_state_text: str, available_actions: list) -> str:
         """Return one action name from available_actions."""
+        return self.decide_verbose(perceived_state_text, available_actions)["action"]
+
+    def decide_verbose(self, perceived_state_text: str, available_actions: list) -> dict:
+        """Full decision detail: {action, choice, confidence, probabilities,
+        state_text, available}. decide() is derived from this; subclasses that
+        override decide() directly must still implement this for the live view."""
         raise NotImplementedError
 
 
@@ -116,6 +122,18 @@ class MockPolicy(Policy):
                 return "rest"
             return "rest" if self.rng.random() < 0.7 else "wander"
         return "wander"
+
+    def decide_verbose(self, perceived_state_text: str, available_actions: list) -> dict:
+        action = self.decide(perceived_state_text, available_actions)
+        return {
+            "action": action,
+            "choice": action,
+            "confidence": 1.0,
+            "probabilities": {a: (1.0 if a == action else 0.0)
+                              for a in available_actions} or None,
+            "state_text": perceived_state_text,
+            "available": list(available_actions),
+        }
 
 
 # One-line descriptions sent to Jev as the Choice options. Clear descriptions
@@ -215,9 +233,11 @@ class JevPolicy(Policy):
         except Exception:
             return None
 
-    def decide(self, perceived_state_text: str, available_actions: list) -> str:
+    def decide_verbose(self, perceived_state_text: str, available_actions: list) -> dict:
         if not available_actions:
-            return "rest"
+            return {"action": "rest", "choice": "rest", "confidence": 1.0,
+                    "probabilities": None, "state_text": perceived_state_text,
+                    "available": []}
         criteria = {a: ACTION_DESCRIPTIONS.get(a, a) for a in available_actions}
         body = json.dumps({
             "state": perceived_state_text,
@@ -244,13 +264,20 @@ class JevPolicy(Policy):
             ans = data.get("answers", {}).get("action", {})
             choice = ans.get("choice")
             conf = ans.get("confidence") or 0.0
+            probs = ans.get("probabilities")
             usage = data.get("usage", {})
             self.metrics.record(latency_ms,
                                 usage.get("input_tokens", 0),
                                 usage.get("output_tokens", 0), conf)
             if choice in available_actions:
-                return choice
-            return self.fallback.decide(perceived_state_text, available_actions)
+                action = choice
+            else:  # Jev answered off-mask; act on the heuristic but keep Jev's view
+                action = self.fallback.decide(perceived_state_text, available_actions)
+            return {"action": action, "choice": choice, "confidence": conf,
+                    "probabilities": probs, "state_text": perceived_state_text,
+                    "available": list(available_actions)}
         except Exception:
             self.metrics.record_error()
-            return self.fallback.decide(perceived_state_text, available_actions)
+            detail = self.fallback.decide_verbose(perceived_state_text, available_actions)
+            detail["state_text"] = perceived_state_text
+            return detail
