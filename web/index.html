@@ -113,7 +113,7 @@
     <span id="tick">tick 0</span>
     <label>seed <input type="number" id="seed" value="7"></label>
     <button id="newrun">new run</button>
-    <label class="chk"><input type="checkbox" id="sample"> sample</label>
+    <label class="chk"><input type="checkbox" id="sample" checked> sample</label>
   </div>
   <div id="pops"></div>
 </div>
@@ -567,9 +567,11 @@ function loadUI() {
 async function restoreUI(saved) {
   if (saved.seed != null) document.getElementById("seed").value = saved.seed;
   if (saved.ticks != null) document.getElementById("speed").value = saved.ticks;
-  if (saved.sample != null) {
-    document.getElementById("sample").checked = !!saved.sample;
-    await control("sample", saved.sample ? 1 : 0);  // keep the server in step
+  {
+    // sample defaults ON; a saved value overrides it
+    const on = saved.sample != null ? !!saved.sample : true;
+    document.getElementById("sample").checked = on;
+    await control("sample", on ? 1 : 0);  // keep the server in step
   }
   if (saved.cam && saved.cam.scale > 0) Object.assign(cam, saved.cam);
 
