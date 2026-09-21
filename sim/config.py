@@ -141,3 +141,7 @@ JEV_PRICE_PER_1M_INPUT = 0.0
 JEV_PRICE_PER_1M_OUTPUT = 0.0
 JEV_MAX_CONCURRENCY = 16     # parallel Jev decide() calls per tick
 HISTORY_MAXLEN = 400         # per-animal decision history kept for the inspector
+
+# ---------------------------------------------------------------- decision economy
+DECIDE_ON_CHANGE = True      # only call the policy when an animal's situation changes
+FORCE_REDECIDE_TICKS = 40    # ... but re-decide at least this often regardless

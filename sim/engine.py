@@ -18,6 +18,14 @@ from .species import SPECIES
 from .world import World
 
 
+def _situation_sig(text: str, available) -> str:
+    """A signature of the decision-relevant situation: the perceived bands minus
+    the animal's own current-action line (which changes on its own as it acts and
+    would otherwise force needless re-decides), plus the legal action set."""
+    lines = [ln for ln in text.splitlines() if not ln.startswith("current action:")]
+    return "\n".join(lines) + "\x01" + ",".join(available)
+
+
 class Simulation:
     def __init__(self, seed: int = C.WORLD_SEED, policy=None):
         self.rng = random.Random(seed + 1)
@@ -101,24 +109,49 @@ class Simulation:
         pers = {a.id: perceive(self.world, a, self.nearby_animals(a.x, a.y))
                 for a in live}
 
-        # Phase 2: decide. The policy call may be a network round-trip (Jev),
-        # so fan out across threads when the policy allows it. Decisions only
-        # read, so this is safe; resolution below stays sequential and ordered.
-        if getattr(self.policy, "parallel", False) and len(live) > 1:
-            workers = min(C.JEV_MAX_CONCURRENCY, len(live))
+        # Phase 2: decide. A policy call may be a network round-trip (Jev), so we
+        # (a) only consult it when an animal's SITUATION changed since its last
+        # decision (else it keeps executing its current intent for free), and
+        # (b) share ONE call across animals whose perception is byte-identical.
+        need = []
+        for a in live:
+            per = pers[a.id]
+            a._sit = _situation_sig(per.text, per.available)
+            stale = (a.jev_detail is None
+                     or a._sit != a.last_sit_sig
+                     or a.ticks_since_decide >= C.FORCE_REDECIDE_TICKS)
+            if stale or not C.DECIDE_ON_CHANGE:
+                need.append(a)
+            else:
+                a.ticks_since_decide += 1
+
+        groups = {}  # identical (state_text, available) -> animals sharing one call
+        for a in need:
+            key = pers[a.id].text + "\x00" + ",".join(pers[a.id].available)
+            groups.setdefault(key, []).append(a)
+        items = list(groups.values())
+
+        def call_group(animals):
+            per = pers[animals[0].id]
+            return animals, self.policy.decide_verbose(per.text, per.available)
+
+        if getattr(self.policy, "parallel", False) and len(items) > 1:
+            workers = min(C.JEV_MAX_CONCURRENCY, len(items))
             with ThreadPoolExecutor(max_workers=workers) as ex:
-                decided = ex.map(
-                    lambda a: (a.id, self.policy.decide_verbose(pers[a.id].text,
-                                                                pers[a.id].available)),
-                    live)
-                decisions = dict(decided)
+                results = list(ex.map(call_group, items))
         else:
-            decisions = {a.id: self.policy.decide_verbose(pers[a.id].text,
-                                                          pers[a.id].available)
-                         for a in live}
+            results = [call_group(g) for g in items]
+
+        decisions = {}
+        for animals, detail in results:
+            for a in animals:
+                decisions[a.id] = detail
+                a.last_sit_sig = a._sit
+                a.ticks_since_decide = 0
 
         # Phase 3: resolve sequentially in the shuffled order (order matters for
         # occupancy and predation; an animal killed earlier this tick is skipped).
+        # decisions.get(id) is None for a skipped animal -> it continues its intent.
         for animal in order:
             if animal.alive and animal.id in pers:
                 self._agent_turn(animal, pers[animal.id], decisions.get(animal.id))
@@ -135,7 +168,10 @@ class Simulation:
                 "action": detail["action"],
                 "confidence": detail.get("confidence"),
             })
-        action = detail["action"] if detail else None
+            action = detail["action"]
+        else:
+            # skipped this tick: keep executing the current intent, no new call
+            action = animal.action
         if action is None or action not in per.available:
             action = "wander"
         if action != animal.action:
