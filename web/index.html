@@ -32,6 +32,15 @@
   }
   #speedval { color: #9fb3c8; min-width: 56px; font-variant-numeric: tabular-nums; }
   label { color: #9fb3c8; }
+  #jev {
+    display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+    width: 700px; max-width: 95vw; font: 12px/1.4 ui-monospace, monospace;
+    color: #9fb3c8; border-top: 1px solid #2a3648; padding-top: 8px;
+  }
+  #jev .m { display: flex; flex-direction: column; align-items: center; }
+  #jev .m b { color: #dbe6f3; font-size: 14px; font-variant-numeric: tabular-nums; }
+  #jev .m span { color: #6f8296; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
+  #jev .hdr { color: #7fd1a6; font-weight: 600; align-self: center; }
 </style>
 </head>
 <body>
@@ -47,6 +56,7 @@
 <div id="pops"></div>
 <canvas id="map" width="700" height="700"></canvas>
 <div id="events"></div>
+<div id="jev"></div>
 
 <script>
 "use strict";
@@ -137,6 +147,23 @@ function render(s) {
     `<span class="pop">vegetation: <b>${(s.veg.reduce((a, b) => a + b, 0) / 1000).toFixed(0)}k</b></span>`;
   document.getElementById("events").innerHTML =
     s.events.slice().reverse().map(e => e.replace(/</g, "&lt;")).join("<br>");
+
+  const jevEl = document.getElementById("jev");
+  const j = s.jev;
+  if (!j) {
+    jevEl.innerHTML = `<span class="hdr">policy: mock heuristic (Jev off)</span>`;
+  } else {
+    const m = (val, label) => `<div class="m"><b>${val}</b><span>${label}</span></div>`;
+    const cost = j.price_known ? `$${j.est_cost_usd.toFixed(4)}` : `${(j.input_tokens + j.output_tokens).toLocaleString()} tok`;
+    jevEl.innerHTML =
+      `<span class="hdr">JEV</span>` +
+      m(j.requests.toLocaleString(), "requests") +
+      m(j.avg_latency_ms + " ms", "avg latency") +
+      m(j.req_per_s + "/s", "throughput") +
+      m(j.avg_confidence, "avg confidence") +
+      m(j.errors, "errors") +
+      m(cost, j.price_known ? "est cost" : "tokens");
+  }
 }
 
 async function control(cmd, value) {

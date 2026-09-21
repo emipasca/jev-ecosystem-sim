@@ -130,3 +130,13 @@ INITIAL_CARCASS_MAX_WATER_DIST = 6
 # ---------------------------------------------------------------- misc
 WANDER_LEG_DIST = 25        # wander picks a random point about this far away
 WANDER_REPICK_TICKS = 20
+
+# ---------------------------------------------------------------- Jev (TypeSafe) API
+JEV_ENDPOINT = "https://api.typesafe.ai/v1/systemone"
+JEV_MODEL = "jev-latest"
+JEV_TIMEOUT = 15.0          # seconds per request before falling back to the heuristic
+# Estimated pricing for the cost metric. Set these to TypeSafe's published rate
+# ($ per 1,000,000 tokens) once confirmed; 0 leaves cost at $0 (tokens still tracked).
+JEV_PRICE_PER_1M_INPUT = 0.0
+JEV_PRICE_PER_1M_OUTPUT = 0.0
+JEV_MAX_CONCURRENCY = 16     # parallel Jev decide() calls per tick

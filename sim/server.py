@@ -26,8 +26,8 @@ WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 class SimRunner:
     """Owns the simulation and advances it on a background thread."""
 
-    def __init__(self, seed: int = C.WORLD_SEED):
-        self.sim = Simulation(seed=seed)
+    def __init__(self, seed: int = C.WORLD_SEED, policy=None):
+        self.sim = Simulation(seed=seed, policy=policy)
         self.lock = threading.Lock()
         self.playing = False
         self.ticks_per_sec = 10.0
@@ -110,8 +110,8 @@ def make_handler(runner: SimRunner):
     return Handler
 
 
-def serve(host: str = "127.0.0.1", port: int = 8000, seed: int = C.WORLD_SEED):
-    runner = SimRunner(seed=seed)
+def serve(host: str = "127.0.0.1", port: int = 8000, seed: int = C.WORLD_SEED, policy=None):
+    runner = SimRunner(seed=seed, policy=policy)
     httpd = ThreadingHTTPServer((host, port), make_handler(runner))
     print(f"ecosystem sim running at http://{host}:{port}  (Ctrl-C to stop)")
     httpd.serve_forever()

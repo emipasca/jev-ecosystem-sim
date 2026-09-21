@@ -7,6 +7,7 @@ state is available via to_state() for recording/rendering.
 
 import random
 from collections import Counter, deque
+from concurrent.futures import ThreadPoolExecutor
 
 from . import config as C
 from .actions import resolve
@@ -94,18 +95,38 @@ class Simulation:
         order = self.animals[:]
         self.rng.shuffle(order)
         self._rebuild_index()
+        live = [a for a in order if a.alive]
+
+        # Phase 1: perceive (read-only) from the start-of-tick world.
+        pers = {a.id: perceive(self.world, a, self.nearby_animals(a.x, a.y))
+                for a in live}
+
+        # Phase 2: decide. The policy call may be a network round-trip (Jev),
+        # so fan out across threads when the policy allows it. Decisions only
+        # read, so this is safe; resolution below stays sequential and ordered.
+        if getattr(self.policy, "parallel", False) and len(live) > 1:
+            workers = min(C.JEV_MAX_CONCURRENCY, len(live))
+            with ThreadPoolExecutor(max_workers=workers) as ex:
+                decided = ex.map(
+                    lambda a: (a.id, self.policy.decide(pers[a.id].text, pers[a.id].available)),
+                    live)
+                decisions = dict(decided)
+        else:
+            decisions = {a.id: self.policy.decide(pers[a.id].text, pers[a.id].available)
+                         for a in live}
+
+        # Phase 3: resolve sequentially in the shuffled order (order matters for
+        # occupancy and predation; an animal killed earlier this tick is skipped).
         for animal in order:
-            if animal.alive:
-                self._agent_turn(animal)
+            if animal.alive and animal.id in pers:
+                self._agent_turn(animal, pers[animal.id], decisions.get(animal.id))
         self.world.update_resources()
         self.animals = [a for a in self.animals if a.alive]
         self.tick_count += 1
 
-    def _agent_turn(self, animal):
+    def _agent_turn(self, animal, per, action):
         animal.sprinted = False
-        per = perceive(self.world, animal, self.nearby_animals(animal.x, animal.y))
-        action = self.policy.decide(per.text, per.available)
-        if action not in per.available:
+        if action is None or action not in per.available:
             action = "wander"
         if action != animal.action:
             animal.action = action
@@ -203,6 +224,8 @@ class Simulation:
             "veg": [int(v) for v in w.veg],
             "events": [f"[{t}] {m}" for t, m in list(self.events)[-8:]],
             "stats": {k: dict(v) for k, v in self.stats.items()},
+            "jev": (self.policy.metrics.snapshot()
+                    if hasattr(self.policy, "metrics") else None),
         }
 
     def world_static(self) -> dict:
