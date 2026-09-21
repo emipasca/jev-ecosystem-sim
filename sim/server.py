@@ -3,8 +3,8 @@
 The backend advances the simulation on a background thread; the page polls
 /api/state and renders the grid on a <canvas>. No third-party dependencies.
 
-Endpoints:
-  GET /                 -> the UI (web/index.html)
+Endpoints (see API.md for the full contract):
+  GET /                 -> the UI (static assets under web/)
   GET /api/world        -> static world description (terrain, size, colours)
   GET /api/state        -> latest tick state (animals, veg, carcasses, pops)
   GET /api/entity?id=N  -> one animal's live decision detail (or alive:false)
@@ -22,6 +22,11 @@ from . import config as C
 from .engine import Simulation
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
+STATIC_TYPES = {
+    ".html": "text/html; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".js": "text/javascript; charset=utf-8",
+}
 
 
 class SimRunner:
@@ -122,30 +127,47 @@ def make_handler(runner: SimRunner):
         def _send_json(self, obj):
             self._send(json.dumps(obj).encode(), "application/json")
 
+        def _serve_static(self, subpath: str):
+            """Map a request path to a file under web/ (flat allowlist by type).
+
+            Resolving and requiring the parent to be exactly WEB_DIR rejects
+            any traversal ("..", encoded or not) and anything outside web/.
+            """
+            name = "index.html" if subpath == "/" else subpath.lstrip("/")
+            target = (WEB_DIR / name).resolve()
+            ctype = STATIC_TYPES.get(target.suffix)
+            if ctype is None or target.parent != WEB_DIR or not target.is_file():
+                self._send(b"not found", "text/plain", 404)
+                return
+            self._send(target.read_bytes(), ctype)
+
+        def _serve_api(self, url):
+            if url.path == "/api/world":
+                self._send_json(runner.world())
+            elif url.path == "/api/state":
+                self._send_json(runner.state())
+            elif url.path == "/api/entity":
+                q = parse_qs(url.query)
+                try:
+                    aid = int(q.get("id", [""])[0])
+                except (TypeError, ValueError):
+                    aid = -1
+                self._send_json(runner.entity(aid))
+            elif url.path == "/api/control":
+                q = parse_qs(url.query)
+                cmd = q.get("cmd", [""])[0]
+                value = q.get("value", [None])[0]
+                self._send_json(runner.control(cmd, value))
+            else:
+                self._send(b"not found", "text/plain", 404)
+
         def do_GET(self):
             url = urlparse(self.path)
             try:
-                if url.path in ("/", "/index.html"):
-                    self._send((WEB_DIR / "index.html").read_bytes(),
-                               "text/html; charset=utf-8")
-                elif url.path == "/api/world":
-                    self._send_json(runner.world())
-                elif url.path == "/api/state":
-                    self._send_json(runner.state())
-                elif url.path == "/api/entity":
-                    q = parse_qs(url.query)
-                    try:
-                        aid = int(q.get("id", [""])[0])
-                    except (TypeError, ValueError):
-                        aid = -1
-                    self._send_json(runner.entity(aid))
-                elif url.path == "/api/control":
-                    q = parse_qs(url.query)
-                    cmd = q.get("cmd", [""])[0]
-                    value = q.get("value", [None])[0]
-                    self._send_json(runner.control(cmd, value))
+                if url.path.startswith("/api/"):
+                    self._serve_api(url)
                 else:
-                    self._send(b"not found", "text/plain", 404)
+                    self._serve_static(url.path)
             except BrokenPipeError:
                 pass
 
