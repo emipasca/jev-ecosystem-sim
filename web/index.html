@@ -81,6 +81,9 @@
   .brow.chosen .bf { background: #7fd1a6; }
   .brow.chosen .bv { color: #7fd1a6; }
   #wdead { color: #c96a5e; font-weight: 600; display: none; padding: 2px 0 6px; }
+  #charts { bottom: 12px; right: 12px; padding: 8px 10px; }
+  #charts .ctitle { color: #6f8296; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 4px; }
+  #chart { display: block; width: 300px; height: 150px; }
   #whistlabel { margin-top: 10px; color: #6f8296; font-size: 10px; text-transform: uppercase; letter-spacing: .04em; }
   #whist {
     margin-top: 4px; max-height: 130px; overflow: auto;
@@ -110,6 +113,10 @@
 </div>
 
 <div id="jev" class="overlay"></div>
+<div id="charts" class="overlay">
+  <div class="ctitle">jev / tick</div>
+  <canvas id="chart" width="300" height="150"></canvas>
+</div>
 <div id="events" class="overlay"></div>
 
 <div id="widget" class="overlay">
@@ -275,6 +282,34 @@ function render(s) {
       m(j.errors, "errors") +
       m(cost, j.price_known ? "est cost" : "tokens");
   }
+  drawCharts(s.jev_series || []);
+}
+
+// two stacked per-tick bar charts: requests/tick (top) and latency/tick (bottom)
+const chartCanvas = document.getElementById("chart");
+const cctx = chartCanvas.getContext("2d");
+function drawCharts(series) {
+  const W = chartCanvas.width, H = chartCanvas.height;
+  cctx.clearRect(0, 0, W, H);
+  const data = series.slice(-80);
+  if (!data.length) return;
+  const gap = 2, n = data.length, bw = Math.max(1, (W - (n - 1) * gap) / n);
+  const panelH = (H - 16) / 2;
+
+  function panel(y0, key, color, label, unit) {
+    const max = Math.max(1, ...data.map(d => d[key] || 0));
+    cctx.fillStyle = "#6f8296";
+    cctx.font = "10px ui-monospace, monospace";
+    cctx.fillText(`${label}: ${data[data.length - 1][key]}${unit} (max ${Math.round(max)})`, 0, y0 + 8);
+    const base = y0 + panelH;
+    data.forEach((d, i) => {
+      const h = Math.round(((d[key] || 0) / max) * (panelH - 12));
+      cctx.fillStyle = color;
+      cctx.fillRect(i * (bw + gap), base - h, bw, h);
+    });
+  }
+  panel(0, "requests", "#7fd1a6", "requests/tick", "");
+  panel(panelH + 16, "latency", "#5b8fc9", "latency", "ms");
 }
 
 // ---------------------------------------------------------- pan / zoom / select

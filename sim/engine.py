@@ -35,6 +35,9 @@ class Simulation:
         self.tick_count = 0
         self.events = deque(maxlen=200)
         self.stats = {"births": Counter(), "deaths": Counter(), "kills": Counter()}
+        self.jev_series = deque(maxlen=C.JEV_SERIES_LEN)  # per-tick (requests, latency)
+        self._prev_jev_req = 0
+        self._prev_jev_lat = 0.0
         self._seed_population()
 
     # ------------------------------------------------------------- setup
@@ -159,6 +162,16 @@ class Simulation:
         self.animals = [a for a in self.animals if a.alive]
         self.tick_count += 1
 
+        # per-tick jev telemetry (delta of the cumulative metrics) for the live chart
+        m = getattr(self.policy, "metrics", None)
+        if m is not None:
+            dreq = m.requests - self._prev_jev_req
+            dlat = (m.total_latency_ms - self._prev_jev_lat) / dreq if dreq > 0 else 0.0
+            self.jev_series.append({"tick": self.tick_count,
+                                    "requests": dreq, "latency": round(dlat, 1)})
+            self._prev_jev_req = m.requests
+            self._prev_jev_lat = m.total_latency_ms
+
     def _agent_turn(self, animal, per, detail):
         animal.sprinted = False
         if detail is not None:
@@ -272,6 +285,7 @@ class Simulation:
             "stats": {k: dict(v) for k, v in self.stats.items()},
             "jev": (self.policy.metrics.snapshot()
                     if hasattr(self.policy, "metrics") else None),
+            "jev_series": list(self.jev_series),
         }
 
     def entity_state(self, animal_id: int) -> dict:

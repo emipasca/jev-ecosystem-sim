@@ -145,3 +145,5 @@ HISTORY_MAXLEN = 400         # per-animal decision history kept for the inspecto
 # ---------------------------------------------------------------- decision economy
 DECIDE_ON_CHANGE = True      # only call the policy when an animal's situation changes
 FORCE_REDECIDE_TICKS = 40    # ... but re-decide at least this often regardless
+
+JEV_SERIES_LEN = 300         # per-tick jev requests/latency kept for the live chart
