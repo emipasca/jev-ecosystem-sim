@@ -147,3 +147,7 @@ DECIDE_ON_CHANGE = True      # only call the policy when an animal's situation c
 FORCE_REDECIDE_TICKS = 40    # ... but re-decide at least this often regardless
 
 JEV_SERIES_LEN = 300         # per-tick jev requests/latency kept for the live chart
+
+# ---------------------------------------------------------------- meander (no-steer wander)
+MEANDER_TURN_SIGMA = 0.6     # radians of heading jitter per step (correlated random walk)
+MEANDER_ALIGN_NOISE = 0.5    # randomness vs momentum when picking the next cell

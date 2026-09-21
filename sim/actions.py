@@ -103,6 +103,32 @@ def move_away(sim, animal, fx, fy, sprint=True):
     return _take_steps(sim, animal, pick, sprint)
 
 
+def move_meander(sim, animal, sprint=False):
+    """A correlated random walk for when nothing is steering the animal: keep a
+    rough heading, jitter it each step, drift around obstacles. Reads as natural
+    milling/foraging instead of a straight march to a point."""
+    world = sim.world
+    rng = sim.rng
+
+    def pick(x, y):
+        h = animal.heading if animal.heading is not None else rng.uniform(0, 2 * math.pi)
+        h += rng.gauss(0, C.MEANDER_TURN_SIGMA)
+        dx, dy = math.cos(h), math.sin(h)
+        best, best_score = None, None
+        for ndx, ndy in NEIGHBORS8:
+            nx, ny = x + ndx, y + ndy
+            if not world.free(nx, ny):
+                continue
+            nlen = math.hypot(ndx, ndy) or 1.0
+            align = (ndx * dx + ndy * dy) / nlen          # momentum toward heading
+            score = align + rng.random() * C.MEANDER_ALIGN_NOISE
+            if best_score is None or score > best_score:
+                best, best_score = (nx, ny), score
+        return best
+
+    return _take_steps(sim, animal, pick, sprint)
+
+
 # ---------------------------------------------------------------- hunt odds
 def hunt_success_prob(world, pred, prey) -> float:
     """P(hunt success) from the state matchup + terrain. Hidden from policies."""
@@ -150,22 +176,9 @@ def resolve(sim, animal, per, action):
 
 
 def _do_wander(sim, animal, per):
-    goal = animal.goal
-    repick = (goal is None or goal[0] != "point"
-              or chebyshev(animal, *goal[1]) <= 1
-              or animal.action_ticks % C.WANDER_REPICK_TICKS == 0 and animal.action_ticks > 0)
-    if repick:
-        for _ in range(12):
-            ang = sim.rng.uniform(0, 2 * math.pi)
-            r = sim.rng.uniform(0.4, 1.0) * C.WANDER_LEG_DIST
-            tx = int(animal.x + math.cos(ang) * r)
-            ty = int(animal.y + math.sin(ang) * r)
-            if sim.world.passable(tx, ty):
-                animal.goal = ("point", (tx, ty))
-                break
-        else:
-            return
-    move_toward(sim, animal, *animal.goal[1], sprint=False)
+    # no target is steering it: meander (correlated random walk), don't march
+    animal.goal = None
+    move_meander(sim, animal, sprint=False)
 
 
 def _do_rest(sim, animal, per):
@@ -185,6 +198,10 @@ def _do_graze(sim, animal, per):
     elif per.veg_target:
         animal.goal = ("point", per.veg_target)
         move_toward(sim, animal, *per.veg_target, sprint=False)
+    else:
+        # hungry but no grass in sight: meander to search rather than freeze
+        animal.goal = None
+        move_meander(sim, animal, sprint=False)
 
 
 def _do_drink(sim, animal, per):
