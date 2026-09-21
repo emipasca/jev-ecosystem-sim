@@ -18,6 +18,21 @@ from .species import SPECIES
 from .world import World
 
 
+def _weighted_choice(rng, probs: dict) -> str:
+    """Sample a key from {option: probability} using rng (deterministic per seed)."""
+    items = [(k, v) for k, v in probs.items() if v and v > 0]
+    if not items:
+        return max(probs, key=probs.get) if probs else "wander"
+    total = sum(v for _, v in items)
+    r = rng.random() * total
+    upto = 0.0
+    for k, v in items:
+        upto += v
+        if r <= upto:
+            return k
+    return items[-1][0]
+
+
 def _situation_sig(text: str, available) -> str:
     """A signature of the decision-relevant situation: the perceived bands minus
     the animal's own current-action line (which changes on its own as it acts and
@@ -145,10 +160,21 @@ class Simulation:
         else:
             results = [call_group(g) for g in items]
 
+        # Optionally sample each animal's action from Jev's distribution instead
+        # of taking the argmax. Done here (sequential, seeded RNG) so it stays
+        # reproducible per seed AND independent per animal, while the API CALL is
+        # still shared across identical states above.
+        sampling = getattr(self.policy, "sample", False)
         decisions = {}
         for animals, detail in results:
             for a in animals:
-                decisions[a.id] = detail
+                probs = detail.get("probabilities")
+                if sampling and probs and len(probs) > 1:
+                    d = dict(detail)
+                    d["action"] = _weighted_choice(self.rng, probs)
+                    decisions[a.id] = d
+                else:
+                    decisions[a.id] = detail
                 a.last_sit_sig = a._sit
                 a.ticks_since_decide = 0
 

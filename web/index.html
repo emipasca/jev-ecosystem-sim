@@ -27,6 +27,8 @@
     border-radius: 6px; padding: 5px 14px; font: inherit; cursor: pointer;
   }
   button:hover { background: #2b3d59; }
+  #seed { width: 60px; background: #161b22; color: #dbe6f3; border: 1px solid #33465f; border-radius: 5px; padding: 4px 6px; font: inherit; }
+  .chk { display: inline-flex; align-items: center; gap: 5px; }
   #tick { font-variant-numeric: tabular-nums; color: #9fb3c8; min-width: 90px; }
   #pops { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 6px; }
   .pop { display: flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
@@ -109,6 +111,9 @@
     <label>speed <input type="range" id="speed" min="1" max="40" value="10"></label>
     <span id="speedval">10 t/s</span>
     <span id="tick">tick 0</span>
+    <label>seed <input type="number" id="seed" value="7"></label>
+    <button id="newrun">new run</button>
+    <label class="chk"><input type="checkbox" id="sample"> sample</label>
   </div>
   <div id="pops"></div>
 </div>
@@ -174,14 +179,18 @@ function fitCamera() {
   cam.y = world.h / 2 - canvas.height / (2 * cam.scale);
 }
 
-async function init() {
-  resize();
+async function loadWorld(refit) {
   world = await (await fetch("api/world")).json();
   offscreen = document.createElement("canvas");
   offscreen.width = world.w; offscreen.height = world.h;
   off = offscreen.getContext("2d");
   base = off.createImageData(world.w, world.h);
-  fitCamera();
+  if (refit) fitCamera();
+}
+
+async function init() {
+  resize();
+  await loadWorld(true);
   poll();
   setInterval(poll, 100);
 }
@@ -495,6 +504,14 @@ document.getElementById("speed").oninput = (e) => {
   document.getElementById("speedval").textContent = e.target.value + " t/s";
   control("speed", e.target.value);
 };
+document.getElementById("newrun").onclick = async () => {
+  const s = document.getElementById("seed").value || "7";
+  await control("reset", s);
+  await loadWorld(true);   // new island -> refetch + refit
+  closeWidget();
+  poll();
+};
+document.getElementById("sample").onchange = (e) => control("sample", e.target.checked ? 1 : 0);
 
 init();
 </script>

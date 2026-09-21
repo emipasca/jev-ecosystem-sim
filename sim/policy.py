@@ -224,6 +224,8 @@ class JevPolicy(Policy):
         self.timeout = timeout if timeout is not None else C.JEV_TIMEOUT
         self.metrics = metrics or JevMetrics()
         self.fallback = fallback or MockPolicy()
+        self.sample = False  # if True, the engine samples the action from the
+        # returned probability distribution instead of taking the top choice
 
     @staticmethod
     def _key_from_config():

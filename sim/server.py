@@ -28,6 +28,8 @@ class SimRunner:
     """Owns the simulation and advances it on a background thread."""
 
     def __init__(self, seed: int = C.WORLD_SEED, policy=None):
+        self.seed = seed
+        self.policy = policy
         self.sim = Simulation(seed=seed, policy=policy)
         self.lock = threading.Lock()
         self.playing = False
@@ -57,6 +59,18 @@ class SimRunner:
             self.sim.step()
             self._state_cache = self.sim.to_state()
 
+    def reset(self, seed) -> dict:
+        with self.lock:
+            self.seed = int(seed)
+            if hasattr(self.policy, "metrics"):
+                from .policy import JevMetrics
+                self.policy.metrics = JevMetrics()
+            self.sim = Simulation(seed=self.seed, policy=self.policy)
+            self.playing = False
+            self._state_cache = self.sim.to_state()
+            self._world_cache = self.sim.world_static()
+        return {"seed": self.seed}
+
     def state(self) -> dict:
         with self.lock:
             return self._state_cache
@@ -82,7 +96,15 @@ class SimRunner:
         elif cmd == "auto":
             self.auto = str(value) not in ("0", "false", "off", "", "None")
             self.playing = True
-        return {"playing": self.playing, "ticks_per_sec": self.ticks_per_sec, "auto": self.auto}
+        elif cmd == "reset":
+            self.reset(value if value not in (None, "") else self.seed)
+        elif cmd == "sample":
+            on = str(value) not in ("0", "false", "off", "", "None")
+            if hasattr(self.policy, "sample"):
+                self.policy.sample = on
+        return {"playing": self.playing, "ticks_per_sec": self.ticks_per_sec,
+                "auto": self.auto, "seed": self.seed,
+                "sample": getattr(self.policy, "sample", False)}
 
 
 def make_handler(runner: SimRunner):
