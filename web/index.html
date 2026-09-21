@@ -105,6 +105,7 @@
     <button id="play">&#9654; play</button>
     <button id="pause">&#10073;&#10073; pause</button>
     <button id="step">step</button>
+    <button id="auto">auto</button>
     <label>speed <input type="range" id="speed" min="1" max="40" value="10"></label>
     <span id="speedval">10 t/s</span>
     <span id="tick">tick 0</span>
@@ -486,6 +487,10 @@ async function control(cmd, value) {
 document.getElementById("play").onclick = () => control("play");
 document.getElementById("pause").onclick = () => control("pause");
 document.getElementById("step").onclick = () => control("step");
+document.getElementById("auto").onclick = () => {
+  document.getElementById("speedval").textContent = "auto";
+  control("auto", 1);
+};
 document.getElementById("speed").oninput = (e) => {
   document.getElementById("speedval").textContent = e.target.value + " t/s";
   control("speed", e.target.value);

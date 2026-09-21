@@ -32,6 +32,7 @@ class SimRunner:
         self.lock = threading.Lock()
         self.playing = False
         self.ticks_per_sec = 10.0
+        self.auto = False  # auto: fire the next tick as soon as the last step returns
         self._state_cache = self.sim.to_state()
         self._world_cache = self.sim.world_static()
         thread = threading.Thread(target=self._loop, daemon=True)
@@ -42,9 +43,12 @@ class SimRunner:
             if self.playing:
                 start = time.time()
                 self.step()
-                # keep to the requested pace, but never spin
-                delay = max(0.0, 1.0 / self.ticks_per_sec - (time.time() - start))
-                time.sleep(delay if delay > 0 else 0.001)
+                if self.auto:
+                    time.sleep(0.001)  # fire the next tick as soon as this one returned
+                else:
+                    # throttle to the requested pace (slower than auto), never spin
+                    delay = max(0.0, 1.0 / self.ticks_per_sec - (time.time() - start))
+                    time.sleep(delay if delay > 0 else 0.001)
             else:
                 time.sleep(0.05)
 
@@ -74,7 +78,11 @@ class SimRunner:
             self.step()
         elif cmd == "speed" and value:
             self.ticks_per_sec = max(0.5, min(60.0, float(value)))
-        return {"playing": self.playing, "ticks_per_sec": self.ticks_per_sec}
+            self.auto = False  # picking a numeric speed leaves auto mode
+        elif cmd == "auto":
+            self.auto = str(value) not in ("0", "false", "off", "", "None")
+            self.playing = True
+        return {"playing": self.playing, "ticks_per_sec": self.ticks_per_sec, "auto": self.auto}
 
 
 def make_handler(runner: SimRunner):
