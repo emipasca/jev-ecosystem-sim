@@ -110,10 +110,32 @@ def move_meander(sim, animal, sprint=False):
     world = sim.world
     rng = sim.rng
 
+    # social bias (computed once per tick): drift toward same-species company up to
+    # the comfort count, push away when more crowded than that.
+    sx = sy = 0.0
+    sp = animal.species
+    if sp.social_cohesion or sp.social_separation:
+        close = [o for o in sim.nearby_animals(animal.x, animal.y)
+                 if o is not animal and o.alive and o.species is sp
+                 and max(abs(o.x - animal.x), abs(o.y - animal.y)) <= sp.social_radius]
+        n = len(close)
+        if n:
+            cx = sum(o.x for o in close) / n - animal.x
+            cy = sum(o.y for o in close) / n - animal.y
+            dd = math.hypot(cx, cy) or 1.0
+            cx, cy = cx / dd, cy / dd
+            if n < sp.social_comfort:
+                w = sp.social_cohesion
+            elif n > sp.social_comfort:
+                w = -sp.social_separation
+            else:
+                w = 0.0
+            sx, sy = cx * w, cy * w
+
     def pick(x, y):
         h = animal.heading if animal.heading is not None else rng.uniform(0, 2 * math.pi)
         h += rng.gauss(0, C.MEANDER_TURN_SIGMA)
-        dx, dy = math.cos(h), math.sin(h)
+        dx, dy = math.cos(h) + sx, math.sin(h) + sy
         best, best_score = None, None
         for ndx, ndy in NEIGHBORS8:
             nx, ny = x + ndx, y + ndy
