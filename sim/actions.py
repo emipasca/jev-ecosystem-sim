@@ -131,6 +131,15 @@ def move_meander(sim, animal, sprint=False):
             else:
                 w = 0.0
             sx, sy = cx * w, cy * w
+            # ALIGNMENT: steer toward the herd's average heading so a cluster
+            # travels together instead of collapsing to a point and freezing.
+            # The average of unit heading vectors has magnitude = how aligned the
+            # herd already is, so coherent herds reinforce and random ones don't.
+            if sp.social_alignment:
+                ax = sum(math.cos(o.heading) for o in close) / n
+                ay = sum(math.sin(o.heading) for o in close) / n
+                sx += ax * sp.social_alignment
+                sy += ay * sp.social_alignment
 
     def pick(x, y):
         h = animal.heading if animal.heading is not None else rng.uniform(0, 2 * math.pi)
